@@ -1,25 +1,121 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+title: 'Reproducible Research: Peer Assessment 1'
+output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
-
 
 ## Loading and preprocessing the data
 
+Load in the data.
+```{r}
+unzip("activity.zip")
+act <- read.csv("activity.csv")
+```
+
+Load required libraries.
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+Explore the data to determine preprocessing needed.
+```{r}
+# str(act)        # date needs to be formatted
+# summary(act)    # NAs are present in data frame
+act$date <- as.Date(act$date, "%Y-%m-%d")
+act_noNA <- act[!is.na(act$steps),]
+```
 
 
 ## What is mean total number of steps taken per day?
+```{r}
+totalStepsPerDay <- tapply(act_noNA$steps, act_noNA$date, FUN=sum)
+```
 
+The total no. of steps taken per day is:
+```{r}
+totalStepsPerDay
+```
+
+Histogram of the total no. of steps taken each day.
+```{r}
+# range(totalStepsPerDay)/30               # to determine suitable bin width
+qplot(totalStepsPerDay, binwidth=500)
+```
+
+The mean total no. of steps per day is: `r mean(totalStepsPerDay)` (`mean(totalStepsPerDay)`)  
+The median total no. of steps per day is: `r median(totalStepsPerDay)` (`median(totalStepsPerDay)`)
 
 
 ## What is the average daily activity pattern?
 
+```{r}
+act_grpByIntervals <- act_noNA %>%
+                      group_by(interval) %>%
+                      summarise(meanSteps=mean(steps))
+
+g <- ggplot(act_grpByIntervals, aes(x=interval, y=meanSteps))
+g <- g + geom_line()
+g
+```
+
+The 5-minute interval that contains the max. no. of steps on average: `r act_grpByIntervals[which.max(act_grpByIntervals$meanSteps),1]` (`act_grpByIntervals[which.max(act_grpByIntervals$meanSteps),1]`)
 
 
 ## Imputing missing values
 
+The no. of rows with missing data:
+```{r}
+which(is.na(act)) %>% unique() %>% length()
+```
+
+The means of the respective 5-minute intervals is used to replace the missing data.
+```{r}
+rowIdsForNAs <- which(is.na(act$steps))
+intervalsAtNAs <- act$interval[rowIdsForNAs]
+
+act_simulatedNAs <- act                 # make replacement on new df
+
+act_simulatedNAs$steps[rowIdsForNAs] <- act_grpByIntervals$meanSteps[
+                                        match(intervalsAtNAs, act_grpByIntervals$interval)]
+
+totalStepsPerDaySimulated <- tapply(act_simulatedNAs$steps, act_simulatedNAs$date, FUN=sum)
+```
+
+Histogram of the total no. of steps taken each day.
+```{r}
+# range(totalStepsPerDaySimulated)/30               # to determine suitable bin width
+qplot(totalStepsPerDaySimulated, binwidth=500)
+```
+
+The mean total no. of steps per day is: `r mean(totalStepsPerDaySimulated)` (`mean(totalStepsPerDaySimulated)`)  
+The median total no. of steps per day is: `r median(totalStepsPerDaySimulated)` (`median(totalStepsPerDaySimulated)`)
+
+After imputing missing values:  
+1. The mean total no. of steps per day remains the same;  
+2. The median total no. of steps per day has increased towards to mean.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+A new column with factors "Weekend" and "Weekday" is introduced.
+```{r}
+act_ByDayOfWeek <- act_simulatedNAs     # to introduce new factor column
+act_ByDayOfWeek$Day <- weekdays(act_ByDayOfWeek$date, abbreviate=TRUE)
+act_ByDayOfWeek$Day <- ifelse(act_ByDayOfWeek$Day %in% c("Sat", "Sun"), "Weekend", "Weekday")
+act_ByDayOfWeek$Day <- as.factor(act_ByDayOfWeek$Day)
+
+act_ByDayOfWeekGrp <- act_ByDayOfWeek %>%
+                      group_by(interval, Day) %>%
+                      summarise(meanSteps=mean(steps))
+```
+
+Panel plot of average no. of steps taken by 5-minute intervals, faceted by "Weekend" and "Weekday"
+```{r}
+g2 <- ggplot(act_ByDayOfWeekGrp, aes(x=interval, y=meanSteps))
+g2 <- g2 + facet_grid(Day ~ .) + geom_line()
+g2
+```
+
